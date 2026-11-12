@@ -1,0 +1,839 @@
+{
+  "name": "ReimburseAI - AI expense policy + PayPal Payouts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "reimburse-form",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2b0331d4-3cbd-460b-a713-de28ceefe04d",
+      "name": "Webhook - Claim Form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        120
+      ],
+      "webhookId": "9bf3046b-228d-4f13-a197-dadd524910d4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Halaman form klaim (di-serve langsung oleh n8n)\nconst POLICY = `Company reimbursement policy: meals up to 150000 IDR, transport up to 100000 IDR, office supplies up to 300000 IDR, anything else up to 100000 IDR. Reject receipts older than 30 days or dated in the future. Reject receipts where total, merchant or date cannot be read. Reject alcohol. Only IDR receipts are accepted.`;\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>ReimburseAI</title>\n<style>\nbody{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}\n.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px;max-width:640px;width:100%}\nh1{font-size:22px;margin:0 0 4px}.muted{color:#8b949e;font-size:13px}\nlabel{display:block;margin:18px 0 6px;font-size:13px;color:#8b949e}\ninput{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:14px;box-sizing:border-box}\ninput[type=file]{border-style:dashed;color:#8b949e;font-size:13px}\nbutton{margin-top:20px;width:100%;padding:12px;border:0;border-radius:8px;background:#238636;color:#fff;font-size:15px;font-weight:600;cursor:pointer}\nbutton:disabled{opacity:.5}\n.policy{margin-top:22px;padding:12px;border-radius:8px;background:#0d1117;border:1px solid #21262d;font-size:12px;color:#8b949e;line-height:1.5}\npre{white-space:pre-wrap;font-size:12px;color:#c9d1d9}\n#out{margin-top:22px;display:none}\n</style></head><body><div class=\"card\">\n<h1>ReimburseAI</h1><span class=\"muted\">Snap a receipt, get reimbursed to PayPal</span>\n<form id=\"f\">\n  <label>Employee PayPal email (sandbox)</label>\n  <input type=\"email\" id=\"email\" required placeholder=\"sb-xxxx@personal.example.com\">\n  <label>Receipt photo</label>\n  <input type=\"file\" id=\"file\" accept=\"image/*\" required>\n  <button id=\"go\" type=\"submit\">Submit claim</button>\n</form>\n<div class=\"policy\"><b>Company policy</b><br>${POLICY}</div>\n<div id=\"out\"><h1 id=\"title\" style=\"margin-top:0\"></h1><pre id=\"body\"></pre></div>\n</div>\n<script>\nconst ENDPOINT='https://bengss.app.n8n.cloud/webhook/reimburse';\nconst f=document.getElementById('f'),go=document.getElementById('go'),out=document.getElementById('out'),\n t=document.getElementById('title'),b=document.getElementById('body');\nf.addEventListener('submit',async(e)=>{\n  e.preventDefault(); go.disabled=true; go.textContent='Processing...';\n  const file=document.getElementById('file').files[0];\n  const b64=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(String(fr.result).split(',')[1]);fr.readAsDataURL(file)});\n  try{\n    const res=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},\n      body:JSON.stringify({image:'data:'+(file.type||'image/jpeg')+';base64,'+b64,\n        employee_email:document.getElementById('email').value})});\n    const txt=await res.text();\n    const appr=txt.match(/https:\\/\\/[^\"'\\s]+reimburse-approve[^\"'\\s]*/);\n    t.textContent=appr?'Claim passed AI policy check':'Claim rejected';\n    b.textContent=appr?('Claim created. Open the manager approval page to release the payout.'):txt.slice(0,400);\n    if(appr){const a=document.createElement('a');a.href=appr[0];a.textContent='Open manager approval page';\n      a.style.cssText='color:#58a6ff;display:inline-block;margin-top:10px';b.appendChild(document.createElement('br'));b.appendChild(a);}\n  }catch(err){t.textContent='Request failed';b.textContent=String(err);}\n  out.style.display='block';go.disabled=false;go.textContent='Submit another claim';\n});\n</script></div></body></html>`;\nreturn [{ json: { status: 200, html } }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "57dddf00-eb9f-490c-a9ae-ad5f584d3b1f",
+      "name": "Form Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "de5a358c-6b9e-44a4-a838-e965569acc5a",
+      "name": "Respond - Form Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reimburse",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "08c1d9a4-896f-4498-ae39-533f4a4cd6f5",
+      "name": "Webhook - Submit Claim",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        380
+      ],
+      "webhookId": "1964422e-6840-40b5-a0b1-8d640b2f1c0c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalisasi klaim + siapkan request AI\nconst inp = $input.first().json;\nconst body = inp.body ?? inp;\nif (!body.image) throw new Error('Field \"image\" wajib diisi');\nif (!body.employee_email) throw new Error('Field \"employee_email\" wajib diisi');\nlet image = String(body.image);\nif (!/^https?:\\/\\//i.test(image) && !image.startsWith('data:')) {\n  image = 'data:image/jpeg;base64,' + image.replace(/\\s/g, '');\n}\nconst POLICY = `Company reimbursement policy: meals up to 150000 IDR, transport up to 100000 IDR, office supplies up to 300000 IDR, anything else up to 100000 IDR. Reject receipts older than 30 days or dated in the future. Reject receipts where total, merchant or date cannot be read. Reject alcohol. Only IDR receipts are accepted.`;\nreturn [{ json: {\n  employee_email: String(body.employee_email).trim().toLowerCase(),\n  image,\n  aiBody: {\n    model: 'deepseek-flash',\n    temperature: 0,\n    max_tokens: 1200,\n    messages: [\n      { role: 'system', content: 'You read expense receipts and apply a company policy. Reply with ONLY JSON: {\"merchant\":string|null,\"date\":\"YYYY-MM-DD\"|null,\"total\":number|null,\"currency\":\"IDR\"|null,\"category\":\"meal|transport|supplies|other\",\"items\":[{\"name\":\"\",\"amount\":0}],\"policy_verdict\":\"approve\"|\"reject\",\"policy_reasons\":[string]}. Numbers have no thousand separators.' },\n      { role: 'user', content: [\n        { type: 'image_url', image_url: { url: image } },\n        { type: 'text', text: 'TODAY: ' + new Date().toISOString().slice(0,10) + '\\nPOLICY: ' + POLICY + '\\n\\nJudge every date relative to TODAY. Read the receipt, then decide policy_verdict and explain briefly in policy_reasons. Categories: meal, transport, supplies, other.' }\n      ] }\n    ]\n  }\n} }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "326143a3-c9da-48fa-ab78-adeaefb6e4a3",
+      "name": "Normalize Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.aiBody }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "50ab7762-d9b9-4fe8-afab-d4ce6e58e5a8",
+      "name": "AI Vision - Read & Judge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keputusan akhir: AI + pengaman keras di kode + deteksi duplikat\nconst ai = $input.first().json;\nconst src = $('Normalize Claim').first().json;\n\nconst raw = (ai.choices && ai.choices[0] && ai.choices[0].message && ai.choices[0].message.content) || '';\nlet doc = null;\ntry { doc = JSON.parse(raw); } catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { doc = JSON.parse(m[0]); } catch (e2) { doc = null; } }\n}\nif (!doc) throw new Error('AI tidak mengembalikan JSON yang valid');\n\nconst LIMITS_IDR = { meal: 150000, transport: 100000, supplies: 300000, other: 100000 };\nconst MAX_AGE_DAYS = 30;\nconst IDR_PER_USD = 16000;\nconst CATS = ['meal', 'transport', 'supplies', 'other'];\n\nconst total = Number(doc.total);\nconst category = CATS.includes(String(doc.category)) ? String(doc.category) : 'other';\nconst merchant = doc.merchant ? String(doc.merchant) : null;\nconst date = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(doc.date)) ? String(doc.date) : null;\nconst currency = String(doc.currency || '').toUpperCase();\nconst limit = LIMITS_IDR[category];\n\nconst aiNotes = Array.isArray(doc.policy_reasons) ? doc.policy_reasons.map(String).slice(0, 6) : [];\nconst reasons = [];\nif (doc.policy_verdict !== 'approve') {\n  if (aiNotes.length) reasons.push(...aiNotes);\n  else reasons.push('AI policy check did not approve this receipt');\n}\n\n// pengaman keras: AI bukan satu-satunya penjaga uang\nif (!Number.isFinite(total) || total <= 0) reasons.push('receipt total could not be read');\nif (currency && currency !== 'IDR') reasons.push('currency ' + currency + ' is not allowed');\nif (!date) reasons.push('receipt date could not be read');\nif (!merchant) reasons.push('merchant name could not be read');\nif (Number.isFinite(total) && total > limit) reasons.push('exceeds the ' + category + ' limit of Rp ' + limit.toLocaleString('id-ID'));\nif (date) {\n  const age = Math.floor((Date.now() - new Date(date + 'T00:00:00Z').getTime()) / 86400000);\n  if (age > MAX_AGE_DAYS) reasons.push('receipt is older than ' + MAX_AGE_DAYS + ' days');\n  if (age < -1) reasons.push('receipt date is in the future');\n}\n\nconst sd = $getWorkflowStaticData('global');\nsd.seen = sd.seen || {};\nconst hash = [merchant || '?', date || '?', Number.isFinite(total) ? total : '?', src.employee_email].join('|').toLowerCase();\nif (sd.seen[hash]) reasons.push('this receipt was already submitted');\n\nconst unique = Array.from(new Set(reasons));\nconst approved = unique.length === 0;\nconst ref = Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();\nconst token = Math.random().toString(36).slice(2, 10);\n\nconst claim = {\n  ref, token, approved,\n  reasons: unique,\n  ai_notes: aiNotes,\n  merchant, date, category,\n  total_idr: Number.isFinite(total) ? total : null,\n  amount_usd: approved ? (Math.round((total / IDR_PER_USD) * 100) / 100).toFixed(2) : null,\n  currency_in: currency || null,\n  limit_idr: limit,\n  employee_email: src.employee_email,\n  items: Array.isArray(doc.items) ? doc.items.slice(0, 20) : [],\n  status: approved ? 'pending_approval' : 'rejected',\n  hash\n};\n\nif (approved) {\n  sd.seen[hash] = ref;\n  sd.claims = sd.claims || {};\n  sd.claims[ref] = claim;\n}\nreturn [{ json: claim }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "900e05ce-d59d-4276-ae2d-d8caf093e9b6",
+      "name": "Policy & Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bd56985c-b884-453a-a326-9f6bf36f38f8",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4a9e3b7a-2ebd-4047-aaae-c956c1ff3f46",
+      "name": "Policy Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Halaman hasil klaim: menunggu approval manager\nconst d = $input.first().json;\nconst money = n => (n === null || n === undefined) ? '-' : 'Rp ' + Number(n).toLocaleString('id-ID');\nconst link = 'https://bengss.app.n8n.cloud/webhook/reimburse-approve?ref=' + encodeURIComponent(d.ref) + '&token=' + encodeURIComponent(d.token);\nconst html = '<!doctype html><html><head><meta charset=\"utf-8\"><title>ReimburseAI</title>'\n + '<style>body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}'\n + '.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px;max-width:620px;width:100%}'\n + 'h1{font-size:22px;margin:0 0 4px}.warn{color:#d29922}.muted{color:#8b949e;font-size:13px}'\n + 'dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;margin:22px 0;font-size:14px}'\n + 'dt{color:#8b949e}dd{margin:0;text-align:right}'\n + 'a.btn{display:inline-block;margin-top:10px;padding:11px 16px;border-radius:8px;background:#1f6feb;color:#fff;text-decoration:none;font-weight:600;font-size:14px}'\n + '</style></head><body><div class=\"card\"><h1 class=\"warn\">Waiting for manager approval</h1>'\n + '<span class=\"muted\">ReimburseAI &middot; claim ' + d.ref + '</span>'\n + '<dl><dt>Employee</dt><dd>' + d.employee_email + '</dd>'\n + '<dt>Merchant</dt><dd>' + (d.merchant || '-') + '</dd>'\n + '<dt>Date</dt><dd>' + (d.date || '-') + '</dd>'\n + '<dt>Category</dt><dd>' + d.category + '</dd>'\n + '<dt>Receipt total</dt><dd>' + money(d.total_idr) + '</dd>'\n + '<dt>Payout</dt><dd>' + d.amount_usd + ' USD</dd></dl>'\n + '<a class=\"btn\" href=\"' + link + '\">Manager approval page</a>'\n + '</div></body></html>';\nreturn [{ json: { status: 200, html } }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "5e95484b-3cdd-40e7-a28f-ba71964e3a4e",
+      "name": "Pending Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "297f9aa7-f150-4a11-a2e6-9eceb5972494",
+      "name": "Respond - Pending Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Halaman penolakan klaim\nconst d = $input.first().json;\nconst money = n => (n === null || n === undefined) ? '-' : 'Rp ' + Number(n).toLocaleString('id-ID');\nconst items = (d.reasons || []).map(r => '<li>' + r + '</li>').join('');\nconst html = '<!doctype html><html><head><meta charset=\"utf-8\"><title>ReimburseAI</title>'\n + '<style>body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}'\n + '.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px;max-width:620px;width:100%}'\n + 'h1{font-size:22px;margin:0 0 4px}.bad{color:#f85149}.muted{color:#8b949e;font-size:13px}'\n + 'dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;margin:22px 0;font-size:14px}'\n + 'dt{color:#8b949e}dd{margin:0;text-align:right}ul{color:#f85149;font-size:14px;line-height:1.6}'\n + '.badge{display:inline-block;background:#3a1416;color:#f85149;border-radius:999px;padding:2px 10px;font-size:12px;margin-left:8px}'\n + '</style></head><body><div class=\"card\"><h1 class=\"bad\">Claim rejected<span class=\"badge\">NO PAYOUT</span></h1>'\n + '<span class=\"muted\">ReimburseAI &middot; claim ' + d.ref + '</span>'\n + '<dl><dt>Merchant</dt><dd>' + (d.merchant || '-') + '</dd>'\n + '<dt>Date</dt><dd>' + (d.date || '-') + '</dd>'\n + '<dt>Total</dt><dd>' + money(d.total_idr) + '</dd>'\n + '<dt>Limit</dt><dd>' + money(d.limit_idr) + '</dd></dl>'\n + '<ul>' + items + '</ul></div></body></html>';\nreturn [{ json: { status: 200, html } }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "ce3a4aa1-f20f-4898-a15c-eb0bc04cec2d",
+      "name": "Rejected Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f9d5e1cb-acd3-4f61-ab77-887730a562f1",
+      "name": "Respond - Rejected Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "reimburse-approve",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5d108185-1308-4bba-aeea-517a11d59f42",
+      "name": "Webhook - Approval Page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        760
+      ],
+      "webhookId": "20f60db2-1692-448f-aecb-b8f29d041428"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ambil klaim (ref + token) — tanpa throw, supaya bisa tampil halaman ramah\nconst q = $input.first().json.query || {};\nconst sd = $getWorkflowStaticData('global');\nconst claim = (sd.claims || {})[q.ref];\nif (!claim) return [{ json: { ok: false, reason: 'not_found', ref: q.ref || null } }];\nif (String(claim.token) !== String(q.token)) return [{ json: { ok: false, reason: 'bad_token', ref: q.ref || null } }];\nif (claim.status === 'paid') return [{ json: Object.assign({}, claim, { ok: false, reason: 'already_paid' }) }];\nreturn [{ json: Object.assign({}, claim, { ok: true }) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "89aabcf3-7b0e-4f9b-ada7-d98c6be809be",
+      "name": "Load Claim Approve",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Halaman approval manager: ringkasan + tombol bayar\nconst d = $input.first().json;\nconst money = n => (n === null || n === undefined) ? '-' : 'Rp ' + Number(n).toLocaleString('id-ID');\nconst items = (d.items || []).map(i => '<tr><td>' + (i.name || '-') + '</td><td>' + money(i.amount) + '</td></tr>').join('');\nconst action = 'https://bengss.app.n8n.cloud/webhook/reimburse-pay?ref=' + encodeURIComponent(d.ref) + '&token=' + encodeURIComponent(d.token);\nconst html = '<!doctype html><html><head><meta charset=\"utf-8\"><title>Approve claim</title>'\n + '<style>body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}'\n + '.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px;max-width:620px;width:100%}'\n + 'h1{font-size:22px;margin:0 0 4px}.muted{color:#8b949e;font-size:13px}'\n + 'dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;margin:22px 0;font-size:14px}'\n + 'dt{color:#8b949e}dd{margin:0;text-align:right}'\n + 'table{width:100%;border-collapse:collapse;font-size:13px}td{border-bottom:1px solid #21262d;padding:7px 0;color:#c9d1d9}td:last-child{text-align:right}'\n + 'form{margin-top:22px}button{width:100%;padding:12px;border:0;border-radius:8px;background:#238636;color:#fff;font-size:15px;font-weight:600;cursor:pointer}'\n + '.note{margin-top:14px;font-size:12px;color:#8b949e;line-height:1.5}'\n + '</style></head><body><div class=\"card\"><h1>Manager approval</h1>'\n + '<span class=\"muted\">AI policy check passed &middot; claim ' + d.ref + '</span>'\n + '<dl><dt>Employee</dt><dd>' + d.employee_email + '</dd>'\n + '<dt>Merchant</dt><dd>' + (d.merchant || '-') + '</dd>'\n + '<dt>Date</dt><dd>' + (d.date || '-') + '</dd>'\n + '<dt>Category</dt><dd>' + d.category + '</dd>'\n + '<dt>Receipt total</dt><dd>' + money(d.total_idr) + '</dd>'\n + '<dt>Payout</dt><dd>' + d.amount_usd + ' USD</dd></dl>'\n + (items ? '<span class=\"muted\">Line items</span><table>' + items + '</table>' : '')\n + '<form method=\"POST\" action=\"' + action + '\"><button type=\"submit\">Approve and pay ' + d.amount_usd + ' USD</button></form>'\n + '<div class=\"note\">Approving triggers a PayPal Payout from the company sandbox balance to ' + d.employee_email + '.</div>'\n + '</div></body></html>';\nreturn [{ json: { status: 200, html } }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "f7112296-7283-46b4-ab39-6adb61bcc2e9",
+      "name": "Approval Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "835cf30d-9895-48ff-a2b8-fe6c07457d1f",
+      "name": "Respond - Approval Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1080,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reimburse-pay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ff0ef79a-15b7-46fa-a827-130dc3369573",
+      "name": "Webhook - Pay",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        1040
+      ],
+      "webhookId": "845db7f1-883e-4ef9-aa88-b101d08af8e3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ambil klaim (ref + token) — tanpa throw, supaya bisa tampil halaman ramah\nconst q = $input.first().json.query || {};\nconst sd = $getWorkflowStaticData('global');\nconst claim = (sd.claims || {})[q.ref];\nif (!claim) return [{ json: { ok: false, reason: 'not_found', ref: q.ref || null } }];\nif (String(claim.token) !== String(q.token)) return [{ json: { ok: false, reason: 'bad_token', ref: q.ref || null } }];\nif (claim.status === 'paid') return [{ json: Object.assign({}, claim, { ok: false, reason: 'already_paid' }) }];\nreturn [{ json: Object.assign({}, claim, { ok: true }) }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "71bc3148-ec0e-45f8-ab9c-88ab4bbeb666",
+      "name": "Load Claim Pay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-m.sandbox.paypal.com/v1/payments/payouts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender_batch_header: { sender_batch_id: $json.ref, email_subject: \"ReimburseAI - expense reimbursed\", email_message: \"Your expense was approved by your manager and paid by ReimburseAI.\" }, items: [ { recipient_type: \"EMAIL\", amount: { value: String($json.amount_usd), currency: \"USD\" }, receiver: $json.employee_email, note: $json.merchant + \" - \" + $json.category, sender_item_id: $json.ref } ] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "8df6f692-c5f4-49a3-a9b7-9b79794014ae",
+      "name": "PayPal Payout",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tandai klaim sudah dibayar\nconst payout = $input.first().json || {};\nconst claim = $('Load Claim Pay').first().json;\nconst sd = $getWorkflowStaticData('global');\nif (sd.claims && sd.claims[claim.ref]) {\n  sd.claims[claim.ref].status = 'paid';\n  sd.claims[claim.ref].payout_batch_id = (payout.batch_header && payout.batch_header.payout_batch_id) || null;\n}\nreturn [{ json: Object.assign({}, claim, {\n  approved: true,\n  status: 'paid',\n  payout_batch_id: (payout.batch_header && payout.batch_header.payout_batch_id) || null,\n  payout_status: (payout.batch_header && payout.batch_header.batch_status) || null\n}) }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "692c7665-7390-40f6-aede-8eb8e8cf01e7",
+      "name": "Mark Paid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Halaman bukti pembayaran\nconst d = $input.first().json;\nconst money = n => (n === null || n === undefined) ? '-' : 'Rp ' + Number(n).toLocaleString('id-ID');\nconst html = '<!doctype html><html><head><meta charset=\"utf-8\"><title>Reimbursed</title>'\n + '<style>body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}'\n + '.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px;max-width:620px;width:100%}'\n + 'h1{font-size:22px;margin:0 0 4px}.ok{color:#3fb950}.muted{color:#8b949e;font-size:13px}'\n + 'dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;margin:22px 0;font-size:14px}'\n + 'dt{color:#8b949e}dd{margin:0;text-align:right}'\n + '.badge{display:inline-block;background:#12301c;color:#3fb950;border-radius:999px;padding:2px 10px;font-size:12px;margin-left:8px}'\n + '</style></head><body><div class=\"card\"><h1 class=\"ok\">Reimbursed<span class=\"badge\">PAID</span></h1>'\n + '<span class=\"muted\">ReimburseAI &middot; claim ' + d.ref + '</span>'\n + '<dl><dt>Paid to</dt><dd>' + d.employee_email + '</dd>'\n + '<dt>Amount</dt><dd>' + d.amount_usd + ' USD</dd>'\n + '<dt>For</dt><dd>' + (d.merchant || '-') + ' (' + money(d.total_idr) + ')</dd>'\n + '<dt>Payout batch</dt><dd>' + (d.payout_batch_id || '-') + '</dd>'\n + '<dt>Status</dt><dd>' + (d.payout_status || '-') + '</dd></dl>'\n + '</div></body></html>';\nreturn [{ json: { status: 200, html } }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "5ef4d5dd-1b7d-4223-a1e6-dcb382e3cbb9",
+      "name": "Paid Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f05f2d58-001f-4517-a67d-cf14df628662",
+      "name": "Respond - Paid Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "73153bbe-9e9a-46e2-aa17-9766c27981c9",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1ce2cb14-ff2c-4dbc-8eb2-cb8b61c47a21",
+      "name": "Pay Ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Human-facing info page: reused link / claim already paid (light theme, plain English)\nconst d = $input.first().json;\nconst MAP = {\n  already_paid: ['This claim has already been paid', 'The payout for this claim was already sent to PayPal. No second payment was created.', 'No new payment', '#1a7f37', '#e6f4ea'],\n  not_found:    ['Claim not found', 'This link has expired, or the claim data was reset when the workflow was re-imported.', 'Link expired', '#9a6700', '#fff8c5'],\n  bad_token:    ['Invalid link', 'The token in this link does not match this claim.', 'Access denied', '#b42318', '#fdecea']\n};\nconst m = MAP[d.reason] || ['This link cannot be used', 'This claim can no longer be processed.', 'Info', '#9a6700', '#fff8c5'];\nconst title = m[0], desc = m[1], badge = m[2], fg = m[3], bg = m[4];\nconst money = n => (n === null || n === undefined || n === '') ? '-' : 'Rp ' + Number(n).toLocaleString('en-US');\nconst usd = n => (n === null || n === undefined || n === '') ? '-' : Number(n).toFixed(2) + ' USD';\nconst rows = [];\nrows.push(['Reference', d.ref ? String(d.ref) : '-']);\nif (d.merchant) rows.push(['Merchant', String(d.merchant)]);\nif (d.date) rows.push(['Date', String(d.date)]);\nif (d.total_idr !== null && d.total_idr !== undefined) rows.push(['Receipt total', money(d.total_idr)]);\nif (d.amount_usd) rows.push(['Payout', usd(d.amount_usd)]);\nif (d.employee_email) rows.push(['Recipient', String(d.employee_email)]);\nif (d.payout_batch_id) rows.push(['PayPal batch', String(d.payout_batch_id)]);\nconst status = d.reason === 'already_paid' ? 409 : 404;\nconst dl = rows.map(r => '<div class=\"row\"><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');\nconst html = '<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">'\n + '<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>' + title + '</title>'\n + '<style>'\n + '*{box-sizing:border-box}'\n + 'body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f2ec;color:#1f2328;margin:0;padding:32px 18px;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}'\n + '.card{background:#fff;border:1px solid #e4e0d6;border-radius:16px;padding:30px 28px;max-width:620px;width:100%;box-shadow:0 12px 30px rgba(31,35,40,.07)}'\n + '.badge{display:inline-block;font-size:12px;font-weight:600;color:' + fg + ';background:' + bg + ';border-radius:999px;padding:5px 12px;margin-bottom:16px}'\n + 'h1{font-size:23px;line-height:1.25;margin:0 0 8px;font-weight:650}'\n + '.muted{color:#5c6370;font-size:14px;line-height:1.6;margin:0 0 22px}'\n + 'dl{margin:0;border-top:1px solid #ece8de}'\n + '.row{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:11px 0;border-bottom:1px solid #ece8de;font-size:14px}'\n + 'dt{color:#6b7280;margin:0}dd{margin:0;font-weight:550;word-break:break-word}'\n + '.foot{margin-top:22px}'\n + 'a.btn{display:inline-block;text-decoration:none;font-size:14px;font-weight:600;padding:10px 16px;border-radius:10px;background:#1f2328;color:#fff}'\n + '</style></head><body><div class=\"card\">'\n + '<span class=\"badge\">' + badge + '</span>'\n + '<h1>' + title + '</h1>'\n + '<p class=\"muted\">' + desc + '</p>'\n + '<dl>' + dl + '</dl>'\n + '<div class=\"foot\"><a class=\"btn\" href=\"/webhook/reimburse-form\">Submit a new claim</a></div>'\n + '</div></body></html>';\nreturn [{ json: { html, status } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "809fea1e-1050-4fd6-954d-34a5e4a52d07",
+      "name": "Claim Closed Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "c369ee55-e2a4-4098-9476-9a1115de7e11",
+      "name": "Respond - Claim Closed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        860,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "20037ee0-9bc5-4a68-8f25-f00e1e3b2c2c",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7a7e68b7-797e-446f-9ad9-f0770673311d",
+      "name": "Approve Ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Human-facing info page: reused link / claim already paid (light theme, plain English)\nconst d = $input.first().json;\nconst MAP = {\n  already_paid: ['This claim has already been paid', 'The payout for this claim was already sent to PayPal. No second payment was created.', 'No new payment', '#1a7f37', '#e6f4ea'],\n  not_found:    ['Claim not found', 'This link has expired, or the claim data was reset when the workflow was re-imported.', 'Link expired', '#9a6700', '#fff8c5'],\n  bad_token:    ['Invalid link', 'The token in this link does not match this claim.', 'Access denied', '#b42318', '#fdecea']\n};\nconst m = MAP[d.reason] || ['This link cannot be used', 'This claim can no longer be processed.', 'Info', '#9a6700', '#fff8c5'];\nconst title = m[0], desc = m[1], badge = m[2], fg = m[3], bg = m[4];\nconst money = n => (n === null || n === undefined || n === '') ? '-' : 'Rp ' + Number(n).toLocaleString('en-US');\nconst usd = n => (n === null || n === undefined || n === '') ? '-' : Number(n).toFixed(2) + ' USD';\nconst rows = [];\nrows.push(['Reference', d.ref ? String(d.ref) : '-']);\nif (d.merchant) rows.push(['Merchant', String(d.merchant)]);\nif (d.date) rows.push(['Date', String(d.date)]);\nif (d.total_idr !== null && d.total_idr !== undefined) rows.push(['Receipt total', money(d.total_idr)]);\nif (d.amount_usd) rows.push(['Payout', usd(d.amount_usd)]);\nif (d.employee_email) rows.push(['Recipient', String(d.employee_email)]);\nif (d.payout_batch_id) rows.push(['PayPal batch', String(d.payout_batch_id)]);\nconst status = d.reason === 'already_paid' ? 409 : 404;\nconst dl = rows.map(r => '<div class=\"row\"><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');\nconst html = '<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">'\n + '<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>' + title + '</title>'\n + '<style>'\n + '*{box-sizing:border-box}'\n + 'body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f2ec;color:#1f2328;margin:0;padding:32px 18px;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}'\n + '.card{background:#fff;border:1px solid #e4e0d6;border-radius:16px;padding:30px 28px;max-width:620px;width:100%;box-shadow:0 12px 30px rgba(31,35,40,.07)}'\n + '.badge{display:inline-block;font-size:12px;font-weight:600;color:' + fg + ';background:' + bg + ';border-radius:999px;padding:5px 12px;margin-bottom:16px}'\n + 'h1{font-size:23px;line-height:1.25;margin:0 0 8px;font-weight:650}'\n + '.muted{color:#5c6370;font-size:14px;line-height:1.6;margin:0 0 22px}'\n + 'dl{margin:0;border-top:1px solid #ece8de}'\n + '.row{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:11px 0;border-bottom:1px solid #ece8de;font-size:14px}'\n + 'dt{color:#6b7280;margin:0}dd{margin:0;font-weight:550;word-break:break-word}'\n + '.foot{margin-top:22px}'\n + 'a.btn{display:inline-block;text-decoration:none;font-size:14px;font-weight:600;padding:10px 16px;border-radius:10px;background:#1f2328;color:#fff}'\n + '</style></head><body><div class=\"card\">'\n + '<span class=\"badge\">' + badge + '</span>'\n + '<h1>' + title + '</h1>'\n + '<p class=\"muted\">' + desc + '</p>'\n + '<dl>' + dl + '</dl>'\n + '<div class=\"foot\"><a class=\"btn\" href=\"/webhook/reimburse-form\">Submit a new claim</a></div>'\n + '</div></body></html>';\nreturn [{ json: { html, status } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "7717d800-1021-4cd5-bcd1-5c3eeadc5bb4",
+      "name": "Claim Link Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f21d2300-4cc8-401b-8b16-0cca5f50498d",
+      "name": "Respond - Claim Link",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        860,
+        960
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Claim Form": {
+      "main": [
+        [
+          {
+            "node": "Form Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Form Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Submit Claim": {
+      "main": [
+        [
+          {
+            "node": "Normalize Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Claim": {
+      "main": [
+        [
+          {
+            "node": "AI Vision - Read & Judge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Vision - Read & Judge": {
+      "main": [
+        [
+          {
+            "node": "Policy & Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy & Decision": {
+      "main": [
+        [
+          {
+            "node": "Policy Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Passed?": {
+      "main": [
+        [
+          {
+            "node": "Pending Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pending Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Pending Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejected Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Rejected Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Approval Page": {
+      "main": [
+        [
+          {
+            "node": "Load Claim Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Claim Approve": {
+      "main": [
+        [
+          {
+            "node": "Approve Ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Approval Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Pay": {
+      "main": [
+        [
+          {
+            "node": "Load Claim Pay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Claim Pay": {
+      "main": [
+        [
+          {
+            "node": "Pay Ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PayPal Payout": {
+      "main": [
+        [
+          {
+            "node": "Mark Paid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Paid": {
+      "main": [
+        [
+          {
+            "node": "Paid Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paid Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Paid Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pay Ok?": {
+      "main": [
+        [
+          {
+            "node": "PayPal Payout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim Closed Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Closed Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Claim Closed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve Ok?": {
+      "main": [
+        [
+          {
+            "node": "Approval Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim Link Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Link Page": {
+      "main": [
+        [
+          {
+            "node": "Respond - Claim Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false
+}
