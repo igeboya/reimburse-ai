@@ -6,6 +6,8 @@ link, and PayPal Payouts sends the money. No server, no database, no dashboard t
 
 **Live demo:** https://bengss.app.n8n.cloud/webhook/reimburse-form
 
+**Demo video (1:46):** https://youtu.be/9PpQwPTjqvs
+
 ---
 
 ## What it does
